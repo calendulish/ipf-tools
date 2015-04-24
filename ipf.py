@@ -277,7 +277,7 @@ class IpfArchive(object):
             return data
         return zlib.decompress(data, -15)
 
-    def extract_all(self, output_dir):
+    def extract_all(self, output_dir, overwrite=False):
         """
         Extracts all files into a directory.
 
@@ -293,18 +293,23 @@ class IpfArchive(object):
 
             # print output_file
             # print info.__dict__
-            if os.path.isfile(output_file):
+            if not overwrite and os.path.isfile(output_file):
                 continue
             head, tail = os.path.split(output_file)
             try:
                 os.makedirs(head)
             except os.error:
                 pass
+
             f = open(output_file, 'wb')
             try:
-                f.write(self.get_data(info.filename))
-            except:
+                data = self.get_data(info.filename, info.archivename)
+                f.write(data)
+            except Exception, e:
                 print('Could not unpack %s' % info.filename)
+                print(info.__dict__)
+                print(e)
+                print(data)
             f.close()
 
     def add(self, name, archive=None, newname=None):
