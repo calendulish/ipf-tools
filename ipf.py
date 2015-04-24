@@ -149,7 +149,7 @@ class IpfArchive(object):
             self.file_handle.close()
         self.closed = True
 
-    def open(self, mode='r'):
+    def open(self, mode='rb'):
         if not self.closed:
             return
 
@@ -414,7 +414,7 @@ if __name__ == '__main__':
             if not args.create:
                 ipf.open()
             else:
-                ipf.open('w')
+                ipf.open('wb')
 
             if args.revision:
                 ipf.revision = args.revision
