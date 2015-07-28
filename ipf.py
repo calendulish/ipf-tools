@@ -198,7 +198,7 @@ class IpfArchive(object):
             fi = self.files[key]
 
             # read data
-            f = open(fi.datafile, 'r')
+            f = open(fi.datafile, 'rb')
             data = f.read()
             f.close()
 
