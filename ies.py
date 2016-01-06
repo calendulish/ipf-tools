@@ -6,6 +6,7 @@ import os
 import zlib
 import argparse
 import csv
+import glob
 
 DEBUG = False
 
@@ -140,23 +141,31 @@ class IesFile(object):
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
-        print('Help: ./ies.py input_file <output_file>')
+        print('Help: ./ies.py input_file(s) <output_directory>')
     else:
-        ies = IesFile(sys.argv[1])
         if len(sys.argv) >= 3:
-            f = open(sys.argv[2], 'wb')
-            writer = csv.writer(f)
-            
-            f.write(','.join(c['name'] for c in ies.columns))
-            f.write('\n')
-            for row in ies.rows:
-                writer.writerow(row)
-            f.close()
+            out_dir = sys.argv[-1]
+            if not os.path.isdir(out_dir):
+                raise Exception('Invalid output directory: ' + out_dir)
+
+            for arg in sys.argv[1:-2]:
+                for filename in glob.glob(arg):
+                    ies = IesFile(filename)
+                    f = open(os.path.join(out_dir, filename + '.csv'), 'wb')
+                    writer = csv.writer(f)
+                    
+                    f.write(','.join(c['name'] for c in ies.columns))
+                    f.write('\n')
+                    for row in ies.rows:
+                        writer.writerow(row)
+                    f.close()
+                    ies.close()
         else:
+            ies = IesFile(sys.argv[1])
             print([col['name'] for col in ies.columns])
             for row in ies.rows:
                 print(row)
 
-            print('Help: ./ies.py input_file <output_file>')
+            print('Help: ./ies.py input_file(s) <output_directory>')
 
         ies.close()
