@@ -1,6 +1,3 @@
-# treeofsavior-tools
-Collection of tools for the Tree of Savior MMO (Project R1)
-
 ## IPF tools
 You can use ipf.py to work with IPF archives. It can be used as a command-line tool with a `tar`-like syntax:
 
@@ -50,3 +47,6 @@ You can extract certain files with the `get_data` method:
     f = open('extracted.bin', 'wb')
     f.write(ipf.get_data('map/map.lua'))
     f.close()
+
+---
+Lara Maia <dev@lara.click> 2017
