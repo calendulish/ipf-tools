@@ -8,7 +8,7 @@ import argparse
 
 from binascii import crc32
 
-SUPPORTED_FORMATS = (bytearray('\x50\x4b\x05\x06'),)
+SUPPORTED_FORMATS = (bytearray('\x50\x4b\x05\x06', 'utf-8'),)
 UNCOMPRESSED_EXT = (".jpg", ".JPG", ".fsb", ".mp3")
 
 class IpfInfo(object):
@@ -104,7 +104,7 @@ class IpfInfo(object):
 
     @property
     def key(self):
-        return '%s_%s' % (self.archivename.lower(), self.filename.lower())
+        return '{}_{}'.format(self.archivename.lower(), self.filename.lower())
 
 class IpfArchive(object):
     """
@@ -175,7 +175,7 @@ class IpfArchive(object):
         self.revision = self._archive_header_data[6]
 
         if self._format not in SUPPORTED_FORMATS:
-            raise Exception('Unknown archive format: %s' % repr(self._format))
+            raise Exception('Unknown archive format: {}'.format(repr(self._format)))
 
         # start reading file list
         self.file_handle.seek(self._filetable_offset, 0)
@@ -187,7 +187,7 @@ class IpfArchive(object):
 
             if info.key in self.files:
                 # duplicate file name?!
-                raise Exception('Duplicate file name: %s' % info.filename)
+                raise Exception('Duplicate file name: {}'.format(info.filename))
 
             self.files[info.key] = info
 
@@ -251,7 +251,7 @@ class IpfArchive(object):
         """
         if archive is None:
             archive = self.archivename
-        key = '%s_%s' % (archive.lower(), filename.lower())
+        key = '{}_{}'.format(archive.lower(), filename.lower())
         if key not in self.files:
             return None
         return self.files[key]
@@ -289,10 +289,10 @@ class IpfArchive(object):
             output_file = os.path.join(output_dir, info.archivename, info.filename)
 
             if self.verbose:
-                print('%s: %s' % (info.archivename, info.filename))
+                print('{}: {}'.format(info.archivename, info.filename))
 
-            # print output_file
-            # print info.__dict__
+            # print(output_file)
+            # print(info.__dict__)
             if not overwrite and os.path.isfile(output_file):
                 continue
             head, tail = os.path.split(output_file)
@@ -305,8 +305,8 @@ class IpfArchive(object):
             try:
                 data = self.get_data(info.filename, info.archivename)
                 f.write(data)
-            except Exception, e:
-                print('Could not unpack %s' % info.filename)
+            except Exception as e:
+                print('Could not unpack {}'.format(info.filename))
                 print(info.__dict__)
                 print(e)
                 print(data)
@@ -321,7 +321,7 @@ class IpfArchive(object):
         if fi.key in self.files:
             mode = 'Replacing'
         if self.verbose:
-            print('%s %s: %s' % (mode, fi.archivename, fi.filename))
+            print('{} {}: {}'.format(mode, fi.archivename, fi.filename))
         self.files[fi.key] = fi
 
 
@@ -337,11 +337,11 @@ def print_meta(ipf, args):
 def print_list(ipf, args):
     for k in ipf.files:
         f = ipf.files[k]
-        print('%s _ %s' % (f.archivename, f.filename))
+        print('{} _ {}'.format(f.archivename, f.filename))
 
         # crc check
         # data = ipf.get_data(k)
-        # print('%s / %s / %s' % (f.crc, crc32(data) & 0xffffffff, ''))
+        # print('{} / {} / {}'.format(f.crc, crc32(data) & 0xffffffff, ''))
 
 def get_norm_relpath(path, start):
     newpath = os.path.normpath(os.path.relpath(path, args.target))

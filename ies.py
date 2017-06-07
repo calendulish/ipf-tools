@@ -53,10 +53,10 @@ class IesFile(object):
         self.string_column_count = self._data_header[4]
 
         if DEBUG:        
-            print self.column_count, 'columns'
-            print self.row_count, 'rows'
-            print self.int_column_count, 'integer columns'
-            print self.string_column_count, 'string columns'
+            print(self.column_count, 'columns')
+            print(self.row_count, 'rows')
+            print(self.int_column_count, 'integer columns')
+            print(self.string_column_count, 'string columns')
 
         # go to columns
         self.file_handle.seek(-self.resource_offset - self.data_offset, 2)
@@ -66,8 +66,8 @@ class IesFile(object):
             name2 = self._decrypt_string(self.file_handle.read(64))
             buf = self.file_handle.read(8)
             coltype, _, position = struct.unpack('<HIH', buf)
-            # print 'column', name1, 'type', ord(buf[0])
-            # print ['%02X' % ord(b) for b in buf]
+            # print('column', name1, 'type', ord(buf[0]))
+            # print(['%02X' % ord(b) for b in buf])
             column = {'name': name1, 'name2': name2, 'type': coltype, 'position': position, 'unknown': _}
             if coltype == 0:
                 int_columns.append(column)
@@ -75,15 +75,15 @@ class IesFile(object):
                 str_columns.append(column)
 
             if DEBUG:
-                print column
+                print(column)
             # self.columns.append(column)
 
         self.columns = sorted(int_columns, key=lambda c: c['position']) + sorted(str_columns, key=lambda c: c['position'])
 
         # go to rows
-        # print 'rows @', -self.resource_offset
+        # print('rows @', -self.resource_offset)
         if DEBUG:
-            print [c['name'] for c in self.columns]
+            print([c['name'] for c in self.columns])
         self.file_handle.seek(-self.resource_offset, 2)
 
         for i in range(self.row_count):
@@ -124,7 +124,7 @@ class IesFile(object):
             self.rows.append(row)
 
             if DEBUG:
-                print row
+                print(row)
 
     def write_csv(self, filename):
         f = open(filename, 'wb')
