@@ -18,8 +18,6 @@ class IpfInfo(object):
     Attributes:
         filename: A string representing the path and name of the file.
         archivename: The name of the originating IPF archive.
-        filename_length: Length of the filename.
-        archivename_length: Length of the archive name.
         compressed_length: The length of the compressed file data.
         uncompressed_length: The length of the uncompressed file data.
         data_offset: Offset in the archive file where data for this file begins.
@@ -39,11 +37,6 @@ class IpfInfo(object):
         self._filename = filename
         self._archivename = archivename
         self.datafile = datafile
-
-        if filename:
-            self._filename_length = len(filename)
-        if archivename:
-            self._archivename_length = len(archivename)
 
     @classmethod
     def from_buffer(self, buf):
@@ -65,9 +58,11 @@ class IpfInfo(object):
         """
         Creates a data buffer that represents this instance.
         """
-        data = struct.pack('<HIIIIH', self.filename_length, self.crc, self.compressed_length, self.uncompressed_length, self.data_offset, self.archivename_length)
-        data += self.archivename
-        data += self.filename
+        archivename = self.archivename.encode()
+        filename = self.filename.encode()
+        data = struct.pack('<HIIIIH', len(filename), self.crc, self.compressed_length, self.uncompressed_length, self.data_offset, len(archivename))
+        data += archivename
+        data += filename
         return data
 
     @property
@@ -77,14 +72,6 @@ class IpfInfo(object):
     @property
     def archivename(self):
         return self._archivename
-
-    @property
-    def filename_length(self):
-        return self._filename_length
-
-    @property
-    def archivename_length(self):
-        return self._archivename_length
 
     @property
     def compressed_length(self):
@@ -182,8 +169,8 @@ class IpfArchive(object):
         for i in range(self.file_count):
             buf = self.file_handle.read(20)
             info = IpfInfo.from_buffer(buf)
-            info._archivename = self.file_handle.read(info.archivename_length)
-            info._filename = self.file_handle.read(info.filename_length)
+            info._archivename = self.file_handle.read(info._archivename_length).decode()
+            info._filename = self.file_handle.read(info._filename_length).decode()
 
             if info.key in self.files:
                 # duplicate file name?!
@@ -234,7 +221,7 @@ class IpfArchive(object):
             pos += len(buf)
 
         # write archive footer
-        buf = struct.pack('<HIHI4sII', len(self.files), self._filetable_offset, 0, pos, str(SUPPORTED_FORMATS[0]), self.base_revision, self.revision)
+        buf = struct.pack('<HIHI4sII', len(self.files), self._filetable_offset, 0, pos, SUPPORTED_FORMATS[0], self.base_revision, self.revision)
         self.file_handle.write(buf)
 
     def get(self, filename, archive=None):
