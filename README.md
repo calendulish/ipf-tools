@@ -15,7 +15,7 @@ You can use ipf.py to work with IPF archives. It can be used as a command-line t
       -r REVISION, --revision REVISION    revision number for the archive
       -b BASE_REVISION, --base-revision BASE_REVISION    base revision number for the archive  
       --enable-encryption      decrypt/encrypt when extracting/archiving
-      --fnfilter FNFILTER      filename filter (eg \*.lua)
+      --fnfilter FNFILTER      filename filter (eg *.lua)
       
 In order to unpack an ipf file to the current directory, you can use:
 
