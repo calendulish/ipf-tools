@@ -5,6 +5,7 @@ import sys
 import os
 import zlib
 import argparse
+import fnmatch
 
 from binascii import crc32
 from crypt import Crypt
@@ -278,7 +279,7 @@ class IpfArchive(object):
             return data
         return zlib.decompress(data, -15)
 
-    def extract_all(self, output_dir, overwrite=False):
+    def extract_all(self, output_dir, overwrite=False, fnfilter=None):
         """
         Extracts all files into a directory.
 
@@ -286,6 +287,9 @@ class IpfArchive(object):
             output_dir: A string describing the output directory.
         """
         for filename in self.files:
+            if fnfilter and not fnmatch.fnmatch(filename, fnfilter):
+                continue
+
             info = self.files[filename]
             output_file = os.path.join(output_dir, info.archivename, info.filename)
 
@@ -296,11 +300,7 @@ class IpfArchive(object):
             # print(info.__dict__)
             if not overwrite and os.path.isfile(output_file):
                 continue
-            head, tail = os.path.split(output_file)
-            try:
-                os.makedirs(head)
-            except os.error:
-                pass
+            os.makedirs(os.path.dirname(output_file), exist_ok=True)
 
             f = open(output_file, 'wb')
             try:
@@ -328,7 +328,7 @@ class IpfArchive(object):
 
 def print_meta(ipf, args):
     print('{:<15}: {:}'.format('File count', ipf.file_count))
-    print('{:<15}: {:}'.format('First file', ipf._filetable_offset))
+    print('{:<15}: {:}'.format('Filetable', ipf._filetable_offset))
     print('{:<15}: {:}'.format('Unknown', ipf._archive_header_data[2]))
     print('{:<15}: {:}'.format('Archive header', ipf._filefooter_offset))
     print('{:<15}: {:}'.format('Format', repr(ipf._format)))
@@ -395,6 +395,7 @@ if __name__ == '__main__':
     parser.add_argument('-r', '--revision', type=int, help='revision number for the archive')
     parser.add_argument('-b', '--base-revision', type=int, help='base revision number for the archive')
     parser.add_argument('--enable-encryption', action='store_true', help='decrypt/encrypt when extracting/archiving')
+    parser.add_argument('--fnfilter', type=str, help='filename filter (eg *.lua)')
 
     parser.add_argument('target', nargs='?', help='target file/directory to be extracted or packed')
 
@@ -429,7 +430,7 @@ if __name__ == '__main__':
             if args.list:
                 print_list(ipf, args)
             elif args.extract:
-                ipf.extract_all(args.directory or '.')
+                ipf.extract_all(args.directory or '.', fnfilter=args.fnfilter)
             elif args.create:
                 create_archive(ipf, args)
 
