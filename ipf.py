@@ -7,9 +7,11 @@ import zlib
 import argparse
 
 from binascii import crc32
+from crypt import Crypt
 
 SUPPORTED_FORMATS = (bytearray('\x50\x4b\x05\x06', 'utf-8'),)
 UNCOMPRESSED_EXT = (".jpg", ".JPG", ".fsb", ".mp3")
+UNENCRYPTED_EXT = UNCOMPRESSED_EXT # they happen to be same
 
 class IpfInfo(object):
     """
@@ -93,12 +95,16 @@ class IpfInfo(object):
     def key(self):
         return '{}_{}'.format(self.archivename.lower(), self.filename.lower())
 
+    def supports_encryption(self):
+        _, extension = os.path.splitext(self._filename)
+        return extension not in UNENCRYPTED_EXT
+
 class IpfArchive(object):
     """
     Class that represents an IPF archive file.
     """
 
-    def __init__(self, name, verbose=False, revision=0, base_revision=0):
+    def __init__(self, name, verbose=False, revision=0, base_revision=0, enable_encryption=False):
         """
         Inits IpfArchive with a file `name`.
 
@@ -108,6 +114,7 @@ class IpfArchive(object):
         self.verbose = verbose
         self.revision = revision
         self.base_revision = base_revision
+        self.enable_encryption = enable_encryption
         self.fullname = os.path.abspath(name)
         _, self.archivename = os.path.split(self.name)
         
@@ -196,16 +203,19 @@ class IpfArchive(object):
             _, extension = os.path.splitext(fi.filename)
             if extension in UNCOMPRESSED_EXT:
                 # write data uncompressed
-                self.file_handle.write(data)
                 fi._compressed_length = fi.uncompressed_length
             else:
                 # compress data
                 deflater = zlib.compressobj(6, zlib.DEFLATED, -15)
-                compressed = deflater.compress(data)
-                compressed += deflater.flush()
-                self.file_handle.write(compressed)
-                fi._compressed_length = len(compressed)
+                data = deflater.compress(data)
+                data += deflater.flush()
+                fi._compressed_length = len(data)
                 deflater = None
+
+            if self.enable_encryption and fi.supports_encryption():
+                data = Crypt().encrypt(data)
+
+            self.file_handle.write(data)
 
             # update file info
             fi._data_offset = pos
@@ -260,6 +270,10 @@ class IpfArchive(object):
             return None
         self.file_handle.seek(info.data_offset)
         data = self.file_handle.read(info.compressed_length)
+
+        if self.enable_encryption and info.supports_encryption():
+            data = Crypt().decrypt(data)
+
         if info.compressed_length == info.uncompressed_length:
             return data
         return zlib.decompress(data, -15)
@@ -380,6 +394,7 @@ if __name__ == '__main__':
     parser.add_argument('-C', '--directory', metavar='DIR', help='change directory to DIR')
     parser.add_argument('-r', '--revision', type=int, help='revision number for the archive')
     parser.add_argument('-b', '--base-revision', type=int, help='base revision number for the archive')
+    parser.add_argument('--enable-encryption', action='store_true', help='decrypt/encrypt when extracting/archiving')
 
     parser.add_argument('target', nargs='?', help='target file/directory to be extracted or packed')
 
@@ -396,7 +411,7 @@ if __name__ == '__main__':
             parser.print_help()
             print('Please specify a file!')
         else:
-            ipf = IpfArchive(args.file, verbose=args.verbose)
+            ipf = IpfArchive(args.file, verbose=args.verbose, enable_encryption=args.enable_encryption)
 
             if not args.create:
                 ipf.open()
