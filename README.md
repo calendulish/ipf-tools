@@ -37,11 +37,11 @@ You can provide filename filter to extract only specific files (e.g. only .lua f
 
 New archives can be created with `-c` (`--create`). The following command will create a new archive `test.ipf` with the contents of the folder `test`:
 
-    python ipf.py -c -f test.ipf test
+    python ipf.py -cf test.ipf test
     
 If you need to work with encrypted archives, use --enable-encryption flag:
 
-    python ipf.py --enable-encryption -xf some_encrypted.ipf
+    python ipf.py --enable-encryption -xf some_encrypted.ipf -C ./output/dir/
     or python ipf.py --enable-encryption -cf new_encrypted.ipf test
 
 Alternatively, `ipf.py` can be used as a library. The `IpfArchive` class handles all interactions with an IPF file. Opening and extracting all files from an archive is as easy as this:
