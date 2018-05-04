@@ -14,6 +14,8 @@ You can use ipf.py to work with IPF archives. It can be used as a command-line t
       -C DIR, --directory DIR  change directory to DIR
       -r REVISION, --revision REVISION    revision number for the archive
       -b BASE_REVISION, --base-revision BASE_REVISION    base revision number for the archive  
+      --enable-encryption      decrypt/encrypt when extracting/archiving
+      --fnfilter FNFILTER      filename filter (eg *.lua)
       
 In order to unpack an ipf file to the current directory, you can use:
 
@@ -29,10 +31,19 @@ If you just want to find information about the file or list the archive contents
     python ipf.py -mtf target.ipf
     or python ipf.py -m -t -f target.ipf
 
+You can provide filename filter to extract only specific files (e.g. only .lua files):
+
+    python ipf.py --fnfilter "*.lua" -xf scripts.ipf
+
 New archives can be created with `-c` (`--create`). The following command will create a new archive `test.ipf` with the contents of the folder `test`:
 
     python ipf.py -c -f test.ipf test
     
+If you need to work with encrypted archives, use --enable-encryption flag:
+
+    python ipf.py --enable-encryption -xf some_encrypted.ipf
+    or python ipf.py --enable-encryption -cf new_encrypted.ipf test
+
 Alternatively, `ipf.py` can be used as a library. The `IpfArchive` class handles all interactions with an IPF file. Opening and extracting all files from an archive is as easy as this:
 
     from ipf import IpfArchive

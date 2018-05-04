@@ -5,11 +5,14 @@ import sys
 import os
 import zlib
 import argparse
+import fnmatch
 
 from binascii import crc32
+from crypt import Crypt
 
 SUPPORTED_FORMATS = (bytearray('\x50\x4b\x05\x06', 'utf-8'),)
 UNCOMPRESSED_EXT = (".jpg", ".JPG", ".fsb", ".mp3")
+UNENCRYPTED_EXT = UNCOMPRESSED_EXT # they happen to be same
 
 class IpfInfo(object):
     """
@@ -18,8 +21,6 @@ class IpfInfo(object):
     Attributes:
         filename: A string representing the path and name of the file.
         archivename: The name of the originating IPF archive.
-        filename_length: Length of the filename.
-        archivename_length: Length of the archive name.
         compressed_length: The length of the compressed file data.
         uncompressed_length: The length of the uncompressed file data.
         data_offset: Offset in the archive file where data for this file begins.
@@ -39,11 +40,6 @@ class IpfInfo(object):
         self._filename = filename
         self._archivename = archivename
         self.datafile = datafile
-
-        if filename:
-            self._filename_length = len(filename)
-        if archivename:
-            self._archivename_length = len(archivename)
 
     @classmethod
     def from_buffer(self, buf):
@@ -65,9 +61,11 @@ class IpfInfo(object):
         """
         Creates a data buffer that represents this instance.
         """
-        data = struct.pack('<HIIIIH', self.filename_length, self.crc, self.compressed_length, self.uncompressed_length, self.data_offset, self.archivename_length)
-        data += self.archivename
-        data += self.filename
+        archivename = self.archivename.encode()
+        filename = self.filename.encode()
+        data = struct.pack('<HIIIIH', len(filename), self.crc, self.compressed_length, self.uncompressed_length, self.data_offset, len(archivename))
+        data += archivename
+        data += filename
         return data
 
     @property
@@ -77,14 +75,6 @@ class IpfInfo(object):
     @property
     def archivename(self):
         return self._archivename
-
-    @property
-    def filename_length(self):
-        return self._filename_length
-
-    @property
-    def archivename_length(self):
-        return self._archivename_length
 
     @property
     def compressed_length(self):
@@ -106,12 +96,16 @@ class IpfInfo(object):
     def key(self):
         return '{}_{}'.format(self.archivename.lower(), self.filename.lower())
 
+    def supports_encryption(self):
+        _, extension = os.path.splitext(self._filename)
+        return extension not in UNENCRYPTED_EXT
+
 class IpfArchive(object):
     """
     Class that represents an IPF archive file.
     """
 
-    def __init__(self, name, verbose=False, revision=0, base_revision=0):
+    def __init__(self, name, verbose=False, revision=0, base_revision=0, enable_encryption=False):
         """
         Inits IpfArchive with a file `name`.
 
@@ -121,6 +115,7 @@ class IpfArchive(object):
         self.verbose = verbose
         self.revision = revision
         self.base_revision = base_revision
+        self.enable_encryption = enable_encryption
         self.fullname = os.path.abspath(name)
         _, self.archivename = os.path.split(self.name)
         
@@ -182,8 +177,8 @@ class IpfArchive(object):
         for i in range(self.file_count):
             buf = self.file_handle.read(20)
             info = IpfInfo.from_buffer(buf)
-            info._archivename = self.file_handle.read(info.archivename_length)
-            info._filename = self.file_handle.read(info.filename_length)
+            info._archivename = self.file_handle.read(info._archivename_length).decode()
+            info._filename = self.file_handle.read(info._filename_length).decode()
 
             if info.key in self.files:
                 # duplicate file name?!
@@ -209,16 +204,19 @@ class IpfArchive(object):
             _, extension = os.path.splitext(fi.filename)
             if extension in UNCOMPRESSED_EXT:
                 # write data uncompressed
-                self.file_handle.write(data)
                 fi._compressed_length = fi.uncompressed_length
             else:
                 # compress data
                 deflater = zlib.compressobj(6, zlib.DEFLATED, -15)
-                compressed = deflater.compress(data)
-                compressed += deflater.flush()
-                self.file_handle.write(compressed)
-                fi._compressed_length = len(compressed)
+                data = deflater.compress(data)
+                data += deflater.flush()
+                fi._compressed_length = len(data)
                 deflater = None
+
+            if self.enable_encryption and fi.supports_encryption():
+                data = Crypt().encrypt(data)
+
+            self.file_handle.write(data)
 
             # update file info
             fi._data_offset = pos
@@ -234,7 +232,7 @@ class IpfArchive(object):
             pos += len(buf)
 
         # write archive footer
-        buf = struct.pack('<HIHI4sII', len(self.files), self._filetable_offset, 0, pos, str(SUPPORTED_FORMATS[0]), self.base_revision, self.revision)
+        buf = struct.pack('<HIHI4sII', len(self.files), self._filetable_offset, 0, pos, SUPPORTED_FORMATS[0], self.base_revision, self.revision)
         self.file_handle.write(buf)
 
     def get(self, filename, archive=None):
@@ -273,11 +271,15 @@ class IpfArchive(object):
             return None
         self.file_handle.seek(info.data_offset)
         data = self.file_handle.read(info.compressed_length)
+
+        if self.enable_encryption and info.supports_encryption():
+            data = Crypt().decrypt(data)
+
         if info.compressed_length == info.uncompressed_length:
             return data
         return zlib.decompress(data, -15)
 
-    def extract_all(self, output_dir, overwrite=False):
+    def extract_all(self, output_dir, overwrite=False, fnfilter=None):
         """
         Extracts all files into a directory.
 
@@ -285,6 +287,9 @@ class IpfArchive(object):
             output_dir: A string describing the output directory.
         """
         for filename in self.files:
+            if fnfilter and not fnmatch.fnmatch(filename, fnfilter):
+                continue
+
             info = self.files[filename]
             output_file = os.path.join(output_dir, info.archivename, info.filename)
 
@@ -295,11 +300,7 @@ class IpfArchive(object):
             # print(info.__dict__)
             if not overwrite and os.path.isfile(output_file):
                 continue
-            head, tail = os.path.split(output_file)
-            try:
-                os.makedirs(head)
-            except os.error:
-                pass
+            os.makedirs(os.path.dirname(output_file), exist_ok=True)
 
             f = open(output_file, 'wb')
             try:
@@ -327,7 +328,7 @@ class IpfArchive(object):
 
 def print_meta(ipf, args):
     print('{:<15}: {:}'.format('File count', ipf.file_count))
-    print('{:<15}: {:}'.format('First file', ipf._filetable_offset))
+    print('{:<15}: {:}'.format('Filetable', ipf._filetable_offset))
     print('{:<15}: {:}'.format('Unknown', ipf._archive_header_data[2]))
     print('{:<15}: {:}'.format('Archive header', ipf._filefooter_offset))
     print('{:<15}: {:}'.format('Format', repr(ipf._format)))
@@ -393,6 +394,8 @@ if __name__ == '__main__':
     parser.add_argument('-C', '--directory', metavar='DIR', help='change directory to DIR')
     parser.add_argument('-r', '--revision', type=int, help='revision number for the archive')
     parser.add_argument('-b', '--base-revision', type=int, help='base revision number for the archive')
+    parser.add_argument('--enable-encryption', action='store_true', help='decrypt/encrypt when extracting/archiving')
+    parser.add_argument('--fnfilter', type=str, help='filename filter (eg *.lua)')
 
     parser.add_argument('target', nargs='?', help='target file/directory to be extracted or packed')
 
@@ -409,7 +412,7 @@ if __name__ == '__main__':
             parser.print_help()
             print('Please specify a file!')
         else:
-            ipf = IpfArchive(args.file, verbose=args.verbose)
+            ipf = IpfArchive(args.file, verbose=args.verbose, enable_encryption=args.enable_encryption)
 
             if not args.create:
                 ipf.open()
@@ -427,7 +430,7 @@ if __name__ == '__main__':
             if args.list:
                 print_list(ipf, args)
             elif args.extract:
-                ipf.extract_all(args.directory or '.')
+                ipf.extract_all(args.directory or '.', fnfilter=args.fnfilter)
             elif args.create:
                 create_archive(ipf, args)
 
