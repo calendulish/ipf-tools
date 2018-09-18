@@ -21,7 +21,11 @@ In order to unpack an ipf file to the current directory, you can use:
 
     python ipf.py -xf target.ipf
     or python ipf.py -x -f target.ipf
-    
+
+Unpacking does not overwrite existing files by default, use `--overwrite` if you need that:
+
+    python ipf.py --overwrite -xf target.ipf
+
 You can also specify an output directory with `-C`:
 
     python ipf.py -xf target.ipf -C ./output/dir/
