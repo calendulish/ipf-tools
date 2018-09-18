@@ -396,6 +396,7 @@ if __name__ == '__main__':
     parser.add_argument('-b', '--base-revision', type=int, help='base revision number for the archive')
     parser.add_argument('--enable-encryption', action='store_true', help='decrypt/encrypt when extracting/archiving')
     parser.add_argument('--fnfilter', type=str, help='filename filter (eg *.lua)')
+    parser.add_argument('--overwrite', action='store_true', help='overwrite existing files')
 
     parser.add_argument('target', nargs='?', help='target file/directory to be extracted or packed')
 
@@ -430,7 +431,7 @@ if __name__ == '__main__':
             if args.list:
                 print_list(ipf, args)
             elif args.extract:
-                ipf.extract_all(args.directory or '.', fnfilter=args.fnfilter)
+                ipf.extract_all(args.directory or '.', fnfilter=args.fnfilter, overwrite=args.overwrite)
             elif args.create:
                 create_archive(ipf, args)
 
