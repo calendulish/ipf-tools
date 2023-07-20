@@ -61,7 +61,7 @@ class IesFile(object):
         # go to columns
         self.file_handle.seek(-self.resource_offset - self.data_offset, 2)
         int_columns, str_columns = [], []
-        for i in range(self.column_count):
+        for _ in range(self.column_count):
             name1 = self._decrypt_string(self.file_handle.read(64))
             name2 = self._decrypt_string(self.file_handle.read(64))
             buf = self.file_handle.read(8)
@@ -76,8 +76,6 @@ class IesFile(object):
 
             if DEBUG:
                 print(column)
-            # self.columns.append(column)
-
         self.columns = sorted(int_columns, key=lambda c: c['position']) + sorted(str_columns, key=lambda c: c['position'])
 
         # go to rows
@@ -86,7 +84,7 @@ class IesFile(object):
             print([c['name'] for c in self.columns])
         self.file_handle.seek(-self.resource_offset, 2)
 
-        for i in range(self.row_count):
+        for _ in range(self.row_count):
             if DEBUG:
                 print(self.file_handle.tell())
             row = []
@@ -112,9 +110,7 @@ class IesFile(object):
                 elif self.columns[j]['type'] in (1, 2):
                     # string
                     buf = self.file_handle.read(2)
-                    length = struct.unpack('<H', buf)[0]
-
-                    if length:
+                    if length := struct.unpack('<H', buf)[0]:
                         buf = self.file_handle.read(length)
                         string = self._decrypt_string(buf)
                         row.append(string)
@@ -127,35 +123,33 @@ class IesFile(object):
                 print(row)
 
     def write_csv(self, filename):
-        f = open(filename, 'wb')
-        writer = csv.writer(f)
-        
-        # write first line with columns
-        f.write(','.join(c['name'] for c in self.columns))
-        f.write('\n')
+        with open(filename, 'wb') as f:
+            writer = csv.writer(f)
 
-        # write rows
-        for row in self.rows:
-            writer.writerow(row)
-        f.close()
+            # write first line with columns
+            f.write(','.join(c['name'] for c in self.columns))
+            f.write('\n')
+
+            # write rows
+            for row in self.rows:
+                writer.writerow(row)
 
 if __name__ == '__main__':
     if len(sys.argv) >= 3:
         out_dir = sys.argv[-1]
         if not os.path.isdir(out_dir):
-            raise Exception('Invalid output directory: ' + out_dir)
+            raise Exception(f'Invalid output directory: {out_dir}')
 
         for arg in sys.argv[1:-2]:
             for filename in glob.glob(arg):
                 ies = IesFile(filename)
-                f = open(os.path.join(out_dir, filename + '.csv'), 'wb')
-                writer = csv.writer(f)
+                with open(os.path.join(out_dir, f'{filename}.csv'), 'wb') as f:
+                    writer = csv.writer(f)
 
-                f.write(','.join(c['name'] for c in ies.columns))
-                f.write('\n')
-                for row in ies.rows:
-                    writer.writerow(row)
-                f.close()
+                    f.write(','.join(c['name'] for c in ies.columns))
+                    f.write('\n')
+                    for row in ies.rows:
+                        writer.writerow(row)
                 ies.close()
     else:
         if len(sys.argv) == 2:
@@ -165,4 +159,4 @@ if __name__ == '__main__':
                 print(row)
             ies.close()
 
-        print('Help: {} input_file(s) <output_directory>'.format(sys.argv[0]))
+        print(f'Help: {sys.argv[0]} input_file(s) <output_directory>')
