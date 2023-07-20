@@ -42,7 +42,7 @@ class IpfInfo(object):
         self.datafile = datafile
 
     @classmethod
-    def from_buffer(self, buf):
+    def from_buffer(cls, buf):
         """
         Creates IpfInfo instance from a data buffer.
         """
@@ -94,7 +94,7 @@ class IpfInfo(object):
 
     @property
     def key(self):
-        return '{}_{}'.format(self.archivename.lower(), self.filename.lower())
+        return f'{self.archivename.lower()}_{self.filename.lower()}'
 
     def supports_encryption(self):
         _, extension = os.path.splitext(self._filename)
@@ -170,11 +170,11 @@ class IpfArchive(object):
         self.revision = self._archive_header_data[6]
 
         if self._format not in SUPPORTED_FORMATS:
-            raise Exception('Unknown archive format: {}'.format(repr(self._format)))
+            raise Exception(f'Unknown archive format: {repr(self._format)}')
 
         # start reading file list
         self.file_handle.seek(self._filetable_offset, 0)
-        for i in range(self.file_count):
+        for _ in range(self.file_count):
             buf = self.file_handle.read(20)
             info = IpfInfo.from_buffer(buf)
             info._archivename = self.file_handle.read(info._archivename_length).decode()
@@ -182,7 +182,7 @@ class IpfArchive(object):
 
             if info.key in self.files:
                 # duplicate file name?!
-                raise Exception('Duplicate file name: {}'.format(info.filename))
+                raise Exception(f'Duplicate file name: {info.filename}')
 
             self.files[info.key] = info
 
@@ -192,11 +192,8 @@ class IpfArchive(object):
         for key in self.files:
             fi = self.files[key]
 
-            # read data
-            f = open(fi.datafile, 'rb')
-            data = f.read()
-            f.close()
-
+            with open(fi.datafile, 'rb') as f:
+                data = f.read()
             fi._crc = crc32(data) & 0xffffffff
             fi._uncompressed_length = len(data)
 
@@ -249,10 +246,8 @@ class IpfArchive(object):
         """
         if archive is None:
             archive = self.archivename
-        key = '{}_{}'.format(archive.lower(), filename.lower())
-        if key not in self.files:
-            return None
-        return self.files[key]
+        key = f'{archive.lower()}_{filename.lower()}'
+        return None if key not in self.files else self.files[key]
 
     def get_data(self, filename, archive=None):
         """
@@ -294,7 +289,7 @@ class IpfArchive(object):
             output_file = os.path.join(output_dir, info.archivename, info.filename)
 
             if self.verbose:
-                print('{}: {}'.format(info.archivename, info.filename))
+                print(f'{info.archivename}: {info.filename}')
 
             # print(output_file)
             # print(info.__dict__)
@@ -302,27 +297,24 @@ class IpfArchive(object):
                 continue
             os.makedirs(os.path.dirname(output_file), exist_ok=True)
 
-            f = open(output_file, 'wb')
-            try:
-                data = self.get_data(info.filename, info.archivename)
-                f.write(data)
-            except Exception as e:
-                print('Could not unpack {}'.format(info.filename))
-                print(info.__dict__)
-                print(e)
-                print(data)
-            f.close()
+            with open(output_file, 'wb') as f:
+                try:
+                    data = self.get_data(info.filename, info.archivename)
+                    f.write(data)
+                except Exception as e:
+                    print(f'Could not unpack {info.filename}')
+                    print(info.__dict__)
+                    print(e)
+                    print(data)
 
     def add(self, name, archive=None, newname=None):
         if archive is None:
             archive = self.archivename
 
-        mode = 'Adding'
         fi = IpfInfo(newname or name, archive, datafile=name)
-        if fi.key in self.files:
-            mode = 'Replacing'
+        mode = 'Replacing' if fi.key in self.files else 'Adding'
         if self.verbose:
-            print('{} {}: {}'.format(mode, fi.archivename, fi.filename))
+            print(f'{mode} {fi.archivename}: {fi.filename}')
         self.files[fi.key] = fi
 
 
@@ -338,7 +330,7 @@ def print_meta(ipf, args):
 def print_list(ipf, args):
     for k in ipf.files:
         f = ipf.files[k]
-        print('{} _ {}'.format(f.archivename, f.filename))
+        print(f'{f.archivename} _ {f.filename}')
 
         # crc check
         # data = ipf.get_data(k)
@@ -346,9 +338,7 @@ def print_list(ipf, args):
 
 def get_norm_relpath(path, start):
     newpath = os.path.normpath(os.path.relpath(path, args.target))
-    if newpath == '.':
-        return ''
-    return newpath
+    return '' if newpath == '.' else newpath
 
 def create_archive(ipf, args):
     if not args.target:
@@ -408,31 +398,30 @@ if __name__ == '__main__':
     elif not any([args.list, args.extract, args.meta, args.create]):
         parser.print_help()
         print('Please specify a function!')
+    elif not args.file:
+        parser.print_help()
+        print('Please specify a file!')
     else:
-        if not args.file:
-            parser.print_help()
-            print('Please specify a file!')
+        ipf = IpfArchive(args.file, verbose=args.verbose, enable_encryption=args.enable_encryption)
+
+        if not args.create:
+            ipf.open()
         else:
-            ipf = IpfArchive(args.file, verbose=args.verbose, enable_encryption=args.enable_encryption)
+            ipf.open('wb')
 
-            if not args.create:
-                ipf.open()
-            else:
-                ipf.open('wb')
+        if args.revision:
+            ipf.revision = args.revision
+        if args.base_revision:
+            ipf.base_revision = args.base_revision
 
-            if args.revision:
-                ipf.revision = args.revision
-            if args.base_revision:
-                ipf.base_revision = args.base_revision
+        if args.meta:
+            print_meta(ipf, args)
 
-            if args.meta:
-                print_meta(ipf, args)
+        if args.list:
+            print_list(ipf, args)
+        elif args.extract:
+            ipf.extract_all(args.directory or '.', fnfilter=args.fnfilter, overwrite=args.overwrite)
+        elif args.create:
+            create_archive(ipf, args)
 
-            if args.list:
-                print_list(ipf, args)
-            elif args.extract:
-                ipf.extract_all(args.directory or '.', fnfilter=args.fnfilter, overwrite=args.overwrite)
-            elif args.create:
-                create_archive(ipf, args)
-
-            ipf.close()
+        ipf.close()
