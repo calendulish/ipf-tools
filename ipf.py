@@ -8,11 +8,14 @@ import argparse
 import fnmatch
 
 from binascii import crc32
-from crypt import Crypt
+import crypt
 
 SUPPORTED_FORMATS = (bytearray('\x50\x4b\x05\x06', 'utf-8'),)
 UNCOMPRESSED_EXT = (".jpg", ".JPG", ".fsb", ".mp3")
 UNENCRYPTED_EXT = UNCOMPRESSED_EXT # they happen to be same
+CLIENT_PASSWORD = bytes([0x6F, 0x66, 0x4F, 0x31, 0x61, 0x30, 0x75, 0x65,
+                         0x58, 0x41, 0x3F, 0x20, 0x5B, 0xFF, 0x73, 0x20,
+                         0x68, 0x20, 0x25, 0x3F])
 
 class IpfInfo(object):
     """
@@ -214,7 +217,7 @@ class IpfArchive(object):
                 deflater = None
 
             if self.enable_encryption and fi.supports_encryption():
-                data = Crypt().encrypt(data)
+                data = crypt.encrypt(data, CLIENT_PASSWORD)
 
             self.file_handle.write(data)
 
@@ -273,7 +276,7 @@ class IpfArchive(object):
         data = self.file_handle.read(info.compressed_length)
 
         if self.enable_encryption and info.supports_encryption():
-            data = Crypt().decrypt(data)
+            data = crypt.decrypt(data, CLIENT_PASSWORD)
 
         if info.compressed_length == info.uncompressed_length:
             return data

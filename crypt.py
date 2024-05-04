@@ -1,7 +1,5 @@
 # ported from IPFUnpacker
 
-CLIENT_PASSWORD = bytes([0x6F, 0x66, 0x4F, 0x31, 0x61, 0x30, 0x75, 0x65, 0x58, 0x41, 0x3F, 0x20, 0x5B, 0xFF, 0x73, 0x20, 0x68, 0x20, 0x25, 0x3F])
-
 CRC32_LUT = [
     0x00000000, 0x77073096, 0xEE0E612C, 0x990951BA, 0x076DC419, 0x706AF48F, 0xE963A535, 0x9E6495A3,
     0x0EDB8832, 0x79DCB8A4, 0xE0D5E91E, 0x97D2D988, 0x09B64C2B, 0x7EB17CBD, 0xE7B82D07, 0x90BF1D91,
@@ -37,32 +35,65 @@ CRC32_LUT = [
     0xB3667A2E, 0xC4614AB8, 0x5D681B02, 0x2A6F2B94, 0xB40BBE37, 0xC30C8EA1, 0x5A05DF1B, 0x2D02EF8D
 ]
 
-class Crypt:
-    def __init__(self, cipher = CLIENT_PASSWORD):
-        self.key0 = 0x12345678
-        self.key1 = 0x23456789
-        self.key2 = 0x34567890
+try:
+    from numba import njit
+    import numpy as np
+    use_numba = True
+    CRC32_LUT = np.array(CRC32_LUT, dtype=np.uint)
+except ImportError:
+    use_numba = False
+    def njit(func):
+        return func
 
-        for b in cipher:
-            self.keys_update(b)
+def decrypt(data: bytes, cipher: bytes):
+    byte_data = bytearray(data)
+    if use_numba:
+        byte_data = np.frombuffer(byte_data, dtype=np.ubyte)
+    decrypt_impl(byte_data, cipher)
+    return bytes(byte_data)
 
-    def keys_update(self, b):
-        self.key0 = CRC32_LUT[(self.key0 ^ b) & 0xff] ^ (self.key0 >> 8)
-        self.key1 = (((0x8088405 * ((self.key0 & 0xff) + self.key1)) & 0xffffffff) + 1) & 0xffffffff
-        self.key2 = CRC32_LUT[(self.key2 ^ self.key1 >> 24) & 0xff] ^ (self.key2 >> 8)
+def encrypt(data: bytes, cipher: bytes):
+    byte_data = bytearray(data)
+    if use_numba:
+        byte_data = np.frombuffer(byte_data, dtype=np.ubyte)
+    encrypt_impl(byte_data, cipher)
+    return bytes(byte_data)
 
-    def decrypt(self, data):
-        byte_data = bytearray(data)
-        for i in range(0, len(byte_data), 2):
-            v = (self.key2 & 0xfffd) | 2
-            byte_data[i] = (byte_data[i] ^ ((v * (v ^ 1)) >> 8)) & 0xff
-            self.keys_update(byte_data[i])
-        return bytes(byte_data)
+@njit
+def prepare_keys(cipher: bytes):
+    key0 = 0x12345678
+    key1 = 0x23456789
+    key2 = 0x34567890
 
-    def encrypt(self, data):
-        byte_data = bytearray(data)
-        for i in range(0, len(byte_data), 2):
-            v = (self.key2 & 0xfffd) | 2
-            self.keys_update(byte_data[i])
-            byte_data[i] = (byte_data[i] ^ ((v * (v ^ 1)) >> 8)) & 0xff
-        return bytes(byte_data)
+    for b in cipher:
+        key0 = CRC32_LUT[(key0 ^ b) & 0xff] ^ (key0 >> 8)
+        key1 = (((0x8088405 * ((key0 & 0xff) + key1)) & 0xffffffff) + 1) & 0xffffffff
+        key2 = CRC32_LUT[(key2 ^ key1 >> 24) & 0xff] ^ (key2 >> 8)
+
+    return key0, key1, key2
+
+@njit
+def decrypt_impl(byte_data, cipher: bytes):
+    key0, key1, key2 = prepare_keys(cipher)
+
+    for i in range(0, len(byte_data), 2):
+        v = (key2 & 0xfffd) | 2
+
+        byte_data[i] = (byte_data[i] ^ ((v * (v ^ 1)) >> 8)) & 0xff
+
+        key0 = CRC32_LUT[(key0 ^ byte_data[i]) & 0xff] ^ (key0 >> 8)
+        key1 = (((0x8088405 * ((key0 & 0xff) + key1)) & 0xffffffff) + 1) & 0xffffffff
+        key2 = CRC32_LUT[(key2 ^ key1 >> 24) & 0xff] ^ (key2 >> 8)
+
+@njit
+def encrypt_impl(byte_data, cipher: bytes):
+    key0, key1, key2 = prepare_keys(cipher)
+
+    for i in range(0, len(byte_data), 2):
+        v = (key2 & 0xfffd) | 2
+
+        key0 = CRC32_LUT[(key0 ^ byte_data[i]) & 0xff] ^ (key0 >> 8)
+        key1 = (((0x8088405 * ((key0 & 0xff) + key1)) & 0xffffffff) + 1) & 0xffffffff
+        key2 = CRC32_LUT[(key2 ^ key1 >> 24) & 0xff] ^ (key2 >> 8)
+
+        byte_data[i] = (byte_data[i] ^ ((v * (v ^ 1)) >> 8)) & 0xff
